@@ -7,7 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { DiffView } from "./components/DiffView";
+import { DiffView, type DiffLayout } from "./components/DiffView";
 import { MarkdownPreview } from "./components/MarkdownPreview";
 import { markdown } from "./lib/markdown";
 
@@ -37,6 +37,7 @@ type CliInstallResult = {
 };
 
 type ViewMode = "preview" | "diff";
+type ViewLayout = "split" | "previewOnly";
 type SaveState = "saved" | "dirty" | "saving" | "error";
 type UpdateState = "idle" | "checking" | "available" | "installing" | "error";
 
@@ -48,12 +49,28 @@ type EditorTab = {
   savedContent: string;
   fileSignature: FileSignature;
   mode: ViewMode;
+  layout: ViewLayout;
+  diffLayout: DiffLayout;
   gitContext: GitDiffContext | null;
   saveState: SaveState;
   status: string;
 };
 
+type StoredSessionTab = {
+  path: string;
+  mode: ViewMode;
+  layout: ViewLayout;
+  diffLayout: DiffLayout;
+};
+
+type StoredSession = {
+  version: 1;
+  tabs: StoredSessionTab[];
+  activePath: string | null;
+};
+
 const editorExtensions = [markdownLanguage(), EditorView.lineWrapping];
+const SESSION_STORAGE_KEY = "litemd.session.v1";
 
 function tabId(path: string) {
   return `file:${path}`;
@@ -227,6 +244,8 @@ function savedTabFromFile(
     savedContent: file.contents,
     fileSignature: file.signature,
     mode: "preview",
+    layout: "split",
+    diffLayout: "sideBySide",
     gitContext,
     saveState: "saved",
     status: "",
@@ -238,10 +257,86 @@ function savedTabFromFile(
   };
 }
 
+function readStoredSession(): StoredSession | null {
+  try {
+    const raw = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const value = JSON.parse(raw) as {
+      tabs?: unknown;
+      activePath?: unknown;
+    };
+
+    if (!Array.isArray(value.tabs)) {
+      return null;
+    }
+
+    const seen = new Set<string>();
+    const tabs: StoredSessionTab[] = [];
+
+    for (const item of value.tabs) {
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+
+      const candidate = item as {
+        path?: unknown;
+        mode?: unknown;
+        layout?: unknown;
+        diffLayout?: unknown;
+      };
+      if (typeof candidate.path !== "string" || candidate.path.trim() === "") {
+        continue;
+      }
+
+      if (seen.has(candidate.path)) {
+        continue;
+      }
+
+      seen.add(candidate.path);
+      tabs.push({
+        path: candidate.path,
+        mode: candidate.mode === "diff" ? "diff" : "preview",
+        layout: candidate.layout === "previewOnly" ? "previewOnly" : "split",
+        diffLayout:
+          candidate.diffLayout === "unified" ? "unified" : "sideBySide",
+      });
+    }
+
+    const activePath =
+      typeof value.activePath === "string" ? value.activePath : null;
+
+    return {
+      version: 1,
+      tabs,
+      activePath,
+    };
+  } catch (error) {
+    console.error(error);
+    return null;
+  }
+}
+
+function writeStoredSessionSnapshot(snapshot: string | null) {
+  try {
+    if (snapshot === null) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(SESSION_STORAGE_KEY, snapshot);
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 export default function App() {
   const [tabs, setTabs] = useState<EditorTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [isOpening, setIsOpening] = useState(false);
+  const [isSessionRestored, setIsSessionRestored] = useState(false);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [updateStatus, setUpdateStatus] = useState("Check for Updates");
   const [editorView, setEditorView] = useState<EditorView | null>(null);
@@ -259,6 +354,24 @@ export default function App() {
     [activeTab?.content],
   );
   const diffBase = activeTab?.gitContext?.head_content ?? "";
+  const sessionSnapshot = useMemo(() => {
+    if (tabs.length === 0) {
+      return null;
+    }
+
+    const session: StoredSession = {
+      version: 1,
+      tabs: tabs.map((tab) => ({
+        path: tab.path,
+        mode: tab.mode,
+        layout: tab.layout,
+        diffLayout: tab.diffLayout,
+      })),
+      activePath: activeTab?.path ?? null,
+    };
+
+    return JSON.stringify(session);
+  }, [activeTab?.path, tabs]);
 
   useEffect(() => {
     if (activeTab?.mode === "diff" && !canShowDiff) {
@@ -267,10 +380,22 @@ export default function App() {
   }, [activeTab?.id, activeTab?.mode, canShowDiff]);
 
   useEffect(() => {
+    if (activeTab?.layout === "previewOnly") {
+      setEditorView(null);
+    }
+  }, [activeTab?.id, activeTab?.layout]);
+
+  useEffect(() => {
     const previewScroller = previewScrollerRef.current;
     const currentEditorView = editorView;
     const editorScroller = currentEditorView?.scrollDOM ?? null;
-    if (!currentEditorView || !editorScroller || !previewScroller || activeTab?.mode !== "preview") {
+    if (
+      !currentEditorView ||
+      !editorScroller ||
+      !previewScroller ||
+      activeTab?.mode !== "preview" ||
+      activeTab?.layout !== "split"
+    ) {
       return;
     }
 
@@ -333,7 +458,7 @@ export default function App() {
       }
       scrollSyncSource.current = null;
     };
-  }, [activeTab?.id, activeTab?.mode, editorView, previewHtml]);
+  }, [activeTab?.id, activeTab?.layout, activeTab?.mode, editorView, previewHtml]);
 
   useEffect(() => {
     const dirtyTabs = tabs.filter(
@@ -380,9 +505,43 @@ export default function App() {
   }, [tabs]);
 
   useEffect(() => {
-    void invoke<string[]>("initial_cli_files")
-      .then((paths) => openFilesFromPaths(paths))
-      .catch((error) => console.error(error));
+    if (!isSessionRestored) {
+      return;
+    }
+
+    writeStoredSessionSnapshot(sessionSnapshot);
+  }, [isSessionRestored, sessionSnapshot]);
+
+  useEffect(() => {
+    let disposed = false;
+
+    async function loadInitialFiles() {
+      try {
+        const paths = await invoke<string[]>("initial_cli_files");
+        if (disposed) {
+          return;
+        }
+
+        await restoreSavedSession();
+        if (disposed) {
+          return;
+        }
+
+        await openFilesFromPaths(paths);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!disposed) {
+          setIsSessionRestored(true);
+        }
+      }
+    }
+
+    void loadInitialFiles();
+
+    return () => {
+      disposed = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -485,6 +644,14 @@ export default function App() {
             setActiveMode("diff");
           }
         }
+        return;
+      }
+
+      if (hasPlainCommand && event.shiftKey && key === "v") {
+        event.preventDefault();
+        if (!event.repeat && activeTab) {
+          togglePreviewLayout();
+        }
       }
     }
 
@@ -524,6 +691,47 @@ export default function App() {
     for (const path of paths) {
       await openFile(path);
     }
+  }
+
+  async function restoreSavedSession() {
+    const session = readStoredSession();
+    if (!session || session.tabs.length === 0) {
+      return;
+    }
+
+    const restoredTabs: EditorTab[] = [];
+    for (const item of session.tabs) {
+      try {
+        const [file, gitContext] = await Promise.all([
+          invoke<FileContent>("read_file", { path: item.path }),
+          getGitContext(item.path),
+        ]);
+        const tab = savedTabFromFile(file, gitContext);
+
+        const mode: ViewMode =
+          item.mode === "diff" && gitContext.is_git ? "diff" : "preview";
+
+        restoredTabs.push({
+          ...tab,
+          mode,
+          layout: item.layout === "previewOnly" ? "previewOnly" : "split",
+          diffLayout: item.diffLayout,
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    if (restoredTabs.length === 0) {
+      return;
+    }
+
+    setTabs(restoredTabs);
+
+    const activeTab =
+      restoredTabs.find((tab) => tab.path === session.activePath) ??
+      restoredTabs[0];
+    setActiveTabId(activeTab.id);
   }
 
   async function createNewFile() {
@@ -793,6 +1001,32 @@ export default function App() {
     updateActiveTab((tab) => ({ ...tab, mode }));
   }
 
+  function setActiveLayout(layout: ViewLayout) {
+    updateActiveTab((tab) => ({ ...tab, layout }));
+  }
+
+  function togglePreviewLayout() {
+    updateActiveTab((tab) => ({
+      ...tab,
+      layout: tab.layout === "previewOnly" ? "split" : "previewOnly",
+    }));
+  }
+
+  function toggleDiffLayout() {
+    updateActiveTab((tab) => ({
+      ...tab,
+      diffLayout: tab.diffLayout === "unified" ? "sideBySide" : "unified",
+    }));
+  }
+
+  function toggleDiff() {
+    if (!canShowDiff) {
+      return;
+    }
+
+    setActiveMode(activeTab?.mode === "diff" ? "preview" : "diff");
+  }
+
   function switchActiveTab(offset: number) {
     if (tabs.length === 0) {
       return;
@@ -871,55 +1105,86 @@ export default function App() {
       </nav>
 
       {activeTab ? (
-        <section className="workspace">
-          <section className="pane editor-pane" aria-label="Markdown editor">
-            <CodeMirror
-              key={activeTab.id}
-              value={activeTab.content}
-              height="100%"
-              theme="light"
-              basicSetup={{
-                foldGutter: true,
-                dropCursor: true,
-                allowMultipleSelections: true,
-                indentOnInput: true,
-                bracketMatching: true,
-                closeBrackets: true,
-                autocompletion: true,
-                rectangularSelection: true,
-                highlightSelectionMatches: true,
-                searchKeymap: true,
-              }}
-              extensions={editorExtensions}
-              onChange={handleEditorChange}
-              onCreateEditor={(view) => setEditorView(view)}
-            />
-          </section>
+        <section
+          className={
+            activeTab.layout === "previewOnly"
+              ? "workspace preview-only"
+              : "workspace"
+          }
+        >
+          {activeTab.layout === "split" ? (
+            <section className="pane editor-pane" aria-label="Markdown editor">
+              <CodeMirror
+                key={activeTab.id}
+                value={activeTab.content}
+                height="100%"
+                theme="dark"
+                basicSetup={{
+                  foldGutter: true,
+                  dropCursor: true,
+                  allowMultipleSelections: true,
+                  indentOnInput: true,
+                  bracketMatching: true,
+                  closeBrackets: true,
+                  autocompletion: true,
+                  rectangularSelection: true,
+                  highlightSelectionMatches: true,
+                  searchKeymap: true,
+                }}
+                extensions={editorExtensions}
+                onChange={handleEditorChange}
+                onCreateEditor={(view) => setEditorView(view)}
+              />
+            </section>
+          ) : null}
 
           <section className="pane output-pane" aria-label="Markdown preview and git diff">
             <div className="view-switcher" aria-label="Output mode">
               <button
                 type="button"
-                className={activeTab.mode === "preview" ? "active" : ""}
-                onClick={() => setActiveMode("preview")}
+                className={activeTab.layout === "previewOnly" ? "active" : ""}
+                onClick={() => setActiveLayout("previewOnly")}
+                title="Show output only"
               >
                 Preview
               </button>
               <button
                 type="button"
+                className={activeTab.layout === "split" ? "active" : ""}
+                onClick={() => setActiveLayout("split")}
+                title="Show editor and output"
+              >
+                Split
+              </button>
+              <button
+                type="button"
                 className={activeTab.mode === "diff" ? "active" : ""}
                 disabled={!canShowDiff}
-                onClick={() => setActiveMode("diff")}
+                onClick={() => toggleDiff()}
                 title={canShowDiff ? "Show diff against HEAD" : "Open a file inside a git repository first"}
               >
-                Diff
+                Show Diff
               </button>
+              {activeTab.mode === "diff" ? (
+                <button
+                  type="button"
+                  className={activeTab.diffLayout === "unified" ? "active" : ""}
+                  onClick={() => toggleDiffLayout()}
+                  title="Toggle unified diff"
+                >
+                  Unified
+                </button>
+              ) : null}
             </div>
 
             {activeTab.mode === "preview" ? (
               <MarkdownPreview ref={previewScrollerRef} html={previewHtml} />
             ) : (
-              <DiffView original={diffBase} modified={activeTab.content} />
+              <DiffView
+                original={diffBase}
+                modified={activeTab.content}
+                layout={activeTab.diffLayout}
+              />
             )}
           </section>
         </section>
