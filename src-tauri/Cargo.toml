@@ -1,7 +1,7 @@
 [package]
 name = "litemd"
 version = "0.1.0"
-description = "A lightweight Markdown editor"
+description = "軽量な Markdown エディタ"
 authors = ["mokoshi"]
 edition = "2021"
 

@@ -1,4 +1,4 @@
-name: Release
+name: リリース
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   publish:
-    name: Build macOS ${{ matrix.arch }}
+    name: macOS ${{ matrix.arch }} をビルド
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -46,7 +46,7 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "litemd ${{ github.ref_name }}"
-          releaseBody: "See the assets to download and install this version."
+          releaseBody: "このバージョンをインストールするには、添付ファイルからアプリをダウンロードしてください。"
           releaseDraft: false
           prerelease: false
           tauriScript: pnpm tauri

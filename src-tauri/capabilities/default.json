@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default permissions for litemd",
+  "description": "litemd の標準権限",
   "windows": ["main"],
   "permissions": ["core:default", "dialog:default", "updater:default", "process:default"]
 }
