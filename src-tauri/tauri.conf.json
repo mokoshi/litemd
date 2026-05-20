@@ -1,0 +1,42 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "litemd",
+  "version": "0.1.0",
+  "identifier": "com.mokoshi.litemd",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "litemd",
+        "width": 1180,
+        "height": 760,
+        "minWidth": 720,
+        "minHeight": 520
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app"],
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "resources/bin/litemd": "bin/litemd"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlBN0MxMUYxODNBQkYyNEUKUldSTzhxdUQ4UkY4bXFvQjBpSmR1bGhVR2FpY2N3ZXkzNk1pVHJTMEZENnFpaHFTNDczbU9QeDEK",
+      "endpoints": [
+        "https://github.com/mokoshi/litemd/releases/latest/download/latest.json"
+      ]
+    }
+  }
+}

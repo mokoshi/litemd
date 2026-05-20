@@ -1,0 +1,29 @@
+[package]
+name = "litemd"
+version = "0.1.0"
+description = "A lightweight Markdown editor"
+authors = ["mokoshi"]
+edition = "2021"
+
+[lib]
+name = "litemd_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.0.0", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "=2.0.0", features = [] }
+tauri-codegen = "=2.0.0"
+tauri-macros = "=2.0.0"
+tauri-plugin = "=2.0.0"
+tauri-plugin-dialog = "=2.0.0"
+tauri-plugin-fs = "=2.0.0"
+tauri-plugin-process = "=2.0.0"
+tauri-plugin-single-instance = "=2.0.0"
+tauri-plugin-updater = "=2.0.0"
+tauri-runtime = "=2.0.0"
+tauri-runtime-wry = "=2.0.0"
+tauri-utils = "=2.0.0"
