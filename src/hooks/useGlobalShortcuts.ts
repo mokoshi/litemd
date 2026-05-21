@@ -1,4 +1,8 @@
 import { useEffect } from "react";
+import {
+  isRepeatableShortcutIntent,
+  shortcutIntentForEvent,
+} from "../lib/shortcuts";
 import type { EditorTab } from "../types";
 
 type UseGlobalShortcutsParams = {
@@ -28,78 +32,49 @@ export function useGlobalShortcuts({
 }: UseGlobalShortcutsParams) {
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
-      const key = event.key.toLowerCase();
-      const hasPlainCommand = event.metaKey && !event.ctrlKey && !event.altKey;
-
-      if (event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Tab") {
-        event.preventDefault();
-        switchActiveTab(event.shiftKey ? -1 : 1);
+      const intent = shortcutIntentForEvent(event);
+      if (!intent) {
         return;
       }
 
-      if (hasPlainCommand && /^[1-9]$/.test(event.key)) {
-        event.preventDefault();
-        switchToTabIndex(Number(event.key) - 1);
+      event.preventDefault();
+      if (event.repeat && !isRepeatableShortcutIntent(intent)) {
         return;
       }
 
-      if (hasPlainCommand && !event.shiftKey && key === "s") {
-        event.preventDefault();
-        if (!event.repeat && activeTab && !isTabSaving(activeTab.id)) {
-          saveTab(activeTab);
-        }
-        return;
-      }
-
-      if (hasPlainCommand && !event.shiftKey && key === "w") {
-        event.preventDefault();
-        if (!event.repeat && activeTab) {
-          closeTab(activeTab.id);
-        }
-        return;
-      }
-
-      if (hasPlainCommand && !event.shiftKey && key === "n") {
-        event.preventDefault();
-        if (!event.repeat) {
+      switch (intent.type) {
+        case "switch-tab":
+          switchActiveTab(intent.offset);
+          return;
+        case "switch-tab-index":
+          switchToTabIndex(intent.index);
+          return;
+        case "save":
+          if (activeTab && !isTabSaving(activeTab.id)) {
+            saveTab(activeTab);
+          }
+          return;
+        case "close":
+          if (activeTab) {
+            closeTab(activeTab.id);
+          }
+          return;
+        case "create":
           createNewFile();
-        }
-        return;
-      }
-
-      if (hasPlainCommand && !event.shiftKey && key === "o") {
-        event.preventDefault();
-        if (!event.repeat) {
+          return;
+        case "open":
           openFiles();
-        }
-        return;
-      }
-
-      if (hasPlainCommand && event.shiftKey && event.key === "[") {
-        event.preventDefault();
-        switchActiveTab(-1);
-        return;
-      }
-
-      if (hasPlainCommand && event.shiftKey && event.key === "]") {
-        event.preventDefault();
-        switchActiveTab(1);
-        return;
-      }
-
-      if (hasPlainCommand && event.shiftKey && key === "d") {
-        event.preventDefault();
-        if (!event.repeat && activeTab) {
-          toggleDiff();
-        }
-        return;
-      }
-
-      if (hasPlainCommand && event.shiftKey && key === "v") {
-        event.preventDefault();
-        if (!event.repeat && activeTab) {
-          togglePreviewView();
-        }
+          return;
+        case "toggle-diff":
+          if (activeTab) {
+            toggleDiff();
+          }
+          return;
+        case "toggle-preview":
+          if (activeTab) {
+            togglePreviewView();
+          }
+          return;
       }
     }
 

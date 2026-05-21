@@ -2,30 +2,10 @@ import type {
   EditorTab,
   StoredSession,
   StoredSessionTab,
-  WorkspaceView,
 } from "../types";
+import { workspaceViewFromStoredValue } from "./workspaceView";
 
 export const SESSION_STORAGE_KEY = "litemd.session.v1";
-
-function storedView(candidate: {
-  view?: unknown;
-  mode?: unknown;
-  layout?: unknown;
-}): WorkspaceView {
-  if (
-    candidate.view === "split" ||
-    candidate.view === "preview" ||
-    candidate.view === "diff"
-  ) {
-    return candidate.view;
-  }
-
-  if (candidate.mode === "diff") {
-    return "diff";
-  }
-
-  return candidate.layout === "previewOnly" ? "preview" : "split";
-}
 
 export function parseStoredSessionValue(value: unknown): StoredSession | null {
   if (!value || typeof value !== "object") {
@@ -66,7 +46,7 @@ export function parseStoredSessionValue(value: unknown): StoredSession | null {
     seen.add(candidate.path);
     tabs.push({
       path: candidate.path,
-      view: storedView(candidate),
+      view: workspaceViewFromStoredValue(candidate),
     });
   }
 

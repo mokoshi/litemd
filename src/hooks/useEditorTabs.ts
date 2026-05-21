@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useCliFileListener,
   useExternalFileReload,
@@ -7,187 +6,72 @@ import {
   useSessionSnapshotWriter,
   useTabAutosave,
 } from "./useTabLifecycleEffects";
-import {
-  createBlankSavedTab,
-  loadTabsFromPaths,
-  loadTabsFromSession,
-  markdownFileFilters,
-} from "../lib/editorTabIO";
-import { sameSignature } from "../lib/fileSignature";
+import { useEditorFileCommands } from "./useEditorFileCommands";
+import { useTabFileSync } from "./useTabFileSync";
+import { loadTabsFromSession } from "../lib/editorTabIO";
 import {
   createSessionSnapshot,
   readStoredSession,
 } from "../lib/session";
 import {
   applyEditorContent,
-  applyExternalReload,
-  applySavedContent,
   closeCleanTabInState,
   closeTabInState,
   type EditorTabsState,
-  markTabError,
-  markTabSaving,
   replaceTabsState,
   setActiveTabState,
   updateTabInState,
-  upsertTabsState,
 } from "../lib/tabState";
-import {
-  fileSignature,
-  getGitDiffContext,
-  readFile,
-  writeFile,
-} from "../lib/tauriCommands";
 import {
   activeTabIdAfterRestore,
   findTab,
   tabIdAtIndex,
   tabIdAtOffset,
 } from "../lib/tabNavigation";
+import {
+  canUseWorkspaceView,
+  nextDiffToggleView,
+  nextPreviewToggleView,
+  normalizeWorkspaceView,
+} from "../lib/workspaceView";
 import type {
   EditorTab,
   WorkspaceView,
 } from "../types";
-
-type SaveTabResult =
-  | { ok: true; savedContent: string }
-  | { ok: false };
 
 export function useEditorTabs() {
   const [tabState, setTabState] = useState<EditorTabsState>({
     tabs: [],
     activeTabId: null,
   });
-  const [isOpening, setIsOpening] = useState(false);
   const [isSessionRestored, setIsSessionRestored] = useState(false);
-  const savingIds = useRef(new Set<string>());
-  const savingTasks = useRef(new Map<string, Promise<SaveTabResult>>());
-  const reloadingIds = useRef(new Set<string>());
+  const {
+    isTabSaving,
+    reloadTabIfExternallyChanged,
+    reloadingIds,
+    saveTab,
+    savingIds,
+  } = useTabFileSync(setTabState);
+  const {
+    createNewFile,
+    isOpening,
+    openFiles,
+    openFilesFromPaths,
+  } = useEditorFileCommands(setTabState);
   const { activeTabId, tabs } = tabState;
 
   const activeTab = useMemo(
     () => findTab(tabs, activeTabId),
     [activeTabId, tabs],
   );
-  const canShowDiff = Boolean(activeTab?.gitContext?.is_git);
+  const canShowDiff = Boolean(
+    activeTab && canUseWorkspaceView("diff", activeTab.gitContext),
+  );
   const diffBase = activeTab?.gitContext?.head_content ?? "";
   const sessionSnapshot = useMemo(
     () => createSessionSnapshot(tabs, activeTab?.path ?? null),
     [activeTab?.path, tabs],
   );
-
-  const saveTab = useCallback(async (tab: EditorTab) => {
-    const existingTask = savingTasks.current.get(tab.id);
-    if (existingTask) {
-      return existingTask;
-    }
-
-    const task = (async (): Promise<SaveTabResult> => {
-      savingIds.current.add(tab.id);
-      setTabState((current) => ({
-        ...current,
-        tabs: markTabSaving(current.tabs, tab.id),
-      }));
-
-      try {
-        const signature = await writeFile(tab.path, tab.content);
-        const gitContext = await getGitDiffContext(tab.path);
-
-        setTabState((current) => ({
-          ...current,
-          tabs: applySavedContent(
-            current.tabs,
-            tab.id,
-            tab.content,
-            signature,
-            gitContext,
-          ),
-        }));
-        return { ok: true, savedContent: tab.content };
-      } catch (error) {
-        setTabState((current) => ({
-          ...current,
-          tabs: markTabError(current.tabs, tab.id, error),
-        }));
-        return { ok: false };
-      } finally {
-        savingIds.current.delete(tab.id);
-        savingTasks.current.delete(tab.id);
-      }
-    })();
-
-    savingTasks.current.set(tab.id, task);
-    return task;
-  }, []);
-
-  const reloadTabIfExternallyChanged = useCallback(async (tab: EditorTab) => {
-    reloadingIds.current.add(tab.id);
-
-    try {
-      const signature = await fileSignature(tab.path);
-      if (sameSignature(signature, tab.fileSignature)) {
-        return;
-      }
-
-      const [file, gitContext] = await Promise.all([
-        readFile(tab.path),
-        getGitDiffContext(tab.path),
-      ]);
-
-      setTabState((current) => ({
-        ...current,
-        tabs: applyExternalReload(current.tabs, tab.id, file, gitContext, {
-          isSaveInFlight: savingIds.current.has(tab.id),
-        }),
-      }));
-    } catch (error) {
-      setTabState((current) => ({
-        ...current,
-        tabs: markTabError(current.tabs, tab.id, error),
-      }));
-    } finally {
-      reloadingIds.current.delete(tab.id);
-    }
-  }, []);
-
-  const openFilesFromPaths = useCallback(async (paths: string[]) => {
-    const openedTabs = await loadTabsFromPaths(paths);
-    if (openedTabs.length === 0) {
-      return;
-    }
-
-    setTabState((current) =>
-      upsertTabsState(current, openedTabs, {
-        activeTabId: openedTabs[openedTabs.length - 1].id,
-      }),
-    );
-  }, []);
-
-  const openFiles = useCallback(async () => {
-    if (isOpening) {
-      return;
-    }
-
-    setIsOpening(true);
-
-    try {
-      const selected = await open({
-        multiple: true,
-        filters: markdownFileFilters,
-      });
-
-      const paths = Array.isArray(selected)
-        ? selected
-        : selected
-          ? [selected]
-          : [];
-      await openFilesFromPaths(paths);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsOpening(false);
-    }
-  }, [isOpening, openFilesFromPaths]);
 
   const restoreSavedSession = useCallback(async () => {
     const session = readStoredSession();
@@ -207,38 +91,6 @@ export function useEditorTabs() {
       ),
     );
   }, []);
-
-  const createNewFile = useCallback(async () => {
-    if (isOpening) {
-      return;
-    }
-
-    setIsOpening(true);
-
-    try {
-      const path = await save({
-        defaultPath: "untitled.md",
-        filters: markdownFileFilters,
-      });
-
-      if (!path) {
-        return;
-      }
-
-      const tab = await createBlankSavedTab(path);
-
-      setTabState((current) =>
-        upsertTabsState(current, [tab], {
-          activeTabId: tab.id,
-          replaceExisting: true,
-        }),
-      );
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsOpening(false);
-    }
-  }, [isOpening]);
 
   const closeTab = useCallback(
     async (id: string) => {
@@ -282,7 +134,10 @@ export function useEditorTabs() {
 
   const setActiveView = useCallback(
     (view: WorkspaceView) => {
-      updateActiveTab((tab) => ({ ...tab, view }));
+      updateActiveTab((tab) => ({
+        ...tab,
+        view: normalizeWorkspaceView(view, tab.gitContext),
+      }));
     },
     [updateActiveTab],
   );
@@ -290,17 +145,20 @@ export function useEditorTabs() {
   const togglePreviewView = useCallback(() => {
     updateActiveTab((tab) => ({
       ...tab,
-      view: tab.view === "preview" ? "split" : "preview",
+      view: nextPreviewToggleView(tab.view),
     }));
   }, [updateActiveTab]);
 
   const toggleDiff = useCallback(() => {
-    if (!activeTab || (!canShowDiff && activeTab.view !== "diff")) {
+    if (!activeTab) {
       return;
     }
 
-    setActiveView(activeTab.view === "diff" ? "split" : "diff");
-  }, [activeTab, canShowDiff, setActiveView]);
+    const nextView = nextDiffToggleView(activeTab);
+    if (nextView) {
+      setActiveView(nextView);
+    }
+  }, [activeTab, setActiveView]);
 
   const switchActiveTab = useCallback(
     (offset: number) => {
@@ -337,19 +195,23 @@ export function useEditorTabs() {
   );
 
   useEffect(() => {
-    if (activeTab?.view === "diff" && !canShowDiff) {
-      setActiveView("split");
+    if (!activeTab) {
+      return;
     }
-  }, [activeTab?.id, activeTab?.view, canShowDiff, setActiveView]);
+
+    const normalizedView = normalizeWorkspaceView(
+      activeTab.view,
+      activeTab.gitContext,
+    );
+
+    if (normalizedView !== activeTab.view) {
+      setActiveView(normalizedView);
+    }
+  }, [activeTab?.gitContext, activeTab?.id, activeTab?.view, setActiveView]);
 
   const markSessionRestored = useCallback(() => {
     setIsSessionRestored(true);
   }, []);
-
-  const isTabSaving = useCallback(
-    (id: string) => savingIds.current.has(id),
-    [],
-  );
 
   useTabAutosave(tabs, saveTab, savingIds);
   useExternalFileReload(

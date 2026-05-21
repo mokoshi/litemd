@@ -1,6 +1,7 @@
 import type { EditorTab, StoredSession, WorkspaceView } from "../types";
 import { readFile, getGitDiffContext, writeFile } from "./tauriCommands";
 import { savedTabFromFile } from "./tabs";
+import { normalizeWorkspaceView } from "./workspaceView";
 
 export const markdownFileFilters = [
   { name: "Markdown", extensions: ["md", "markdown", "mdown", "mkd"] },
@@ -46,8 +47,10 @@ export async function loadTabsFromSession(
   for (const item of session.tabs) {
     try {
       const tab = await loadSavedTab(item.path);
-      const view: WorkspaceView =
-        item.view === "diff" && !tab.gitContext?.is_git ? "split" : item.view;
+      const view: WorkspaceView = normalizeWorkspaceView(
+        item.view,
+        tab.gitContext,
+      );
 
       restoredTabs.push({
         ...tab,
