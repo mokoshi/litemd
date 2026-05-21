@@ -11,7 +11,44 @@ type TabOperation = (tab: EditorTab) => void | Promise<unknown>;
 type OpenFilesFromPaths = (paths: string[]) => void | Promise<void>;
 type RestoreSavedSession = () => void | Promise<void>;
 
-export function useTabAutosave(
+type UseEditorTabEffectsParams = {
+  isSessionRestored: boolean;
+  onSessionRestored: () => void;
+  openFilesFromPaths: OpenFilesFromPaths;
+  reloadingIds: MutableRefObject<Set<string>>;
+  reloadTabIfExternallyChanged: TabOperation;
+  restoreSavedSession: RestoreSavedSession;
+  saveTab: TabOperation;
+  savingIds: MutableRefObject<Set<string>>;
+  sessionSnapshot: string | null;
+  tabs: EditorTab[];
+};
+
+export function useEditorTabEffects({
+  isSessionRestored,
+  onSessionRestored,
+  openFilesFromPaths,
+  reloadingIds,
+  reloadTabIfExternallyChanged,
+  restoreSavedSession,
+  saveTab,
+  savingIds,
+  sessionSnapshot,
+  tabs,
+}: UseEditorTabEffectsParams) {
+  useTabAutosave(tabs, saveTab, savingIds);
+  useExternalFileReload(
+    tabs,
+    reloadTabIfExternallyChanged,
+    savingIds,
+    reloadingIds,
+  );
+  useSessionSnapshotWriter(isSessionRestored, sessionSnapshot);
+  useInitialFiles(openFilesFromPaths, restoreSavedSession, onSessionRestored);
+  useCliFileListener(openFilesFromPaths);
+}
+
+function useTabAutosave(
   tabs: EditorTab[],
   saveTab: TabOperation,
   savingIds: MutableRefObject<Set<string>>,
@@ -38,7 +75,7 @@ export function useTabAutosave(
   }, [saveTab, savingIds, tabs]);
 }
 
-export function useExternalFileReload(
+function useExternalFileReload(
   tabs: EditorTab[],
   reloadTabIfExternallyChanged: TabOperation,
   savingIds: MutableRefObject<Set<string>>,
@@ -68,7 +105,7 @@ export function useExternalFileReload(
   }, [reloadingIds, reloadTabIfExternallyChanged, savingIds, tabs]);
 }
 
-export function useSessionSnapshotWriter(
+function useSessionSnapshotWriter(
   isSessionRestored: boolean,
   sessionSnapshot: string | null,
 ) {
@@ -81,7 +118,7 @@ export function useSessionSnapshotWriter(
   }, [isSessionRestored, sessionSnapshot]);
 }
 
-export function useInitialFiles(
+function useInitialFiles(
   openFilesFromPaths: OpenFilesFromPaths,
   restoreSavedSession: RestoreSavedSession,
   onSessionRestored: () => void,
@@ -119,7 +156,7 @@ export function useInitialFiles(
   }, [onSessionRestored, openFilesFromPaths, restoreSavedSession]);
 }
 
-export function useCliFileListener(openFilesFromPaths: OpenFilesFromPaths) {
+function useCliFileListener(openFilesFromPaths: OpenFilesFromPaths) {
   useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;

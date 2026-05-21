@@ -3,7 +3,7 @@ import { markdown as markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
 import type { RefObject } from "react";
 import { DiffView } from "./DiffView";
-import { MarkdownPreview } from "./MarkdownPreview";
+import { RenderedHtmlView } from "./RenderedHtmlView";
 import type { EditorTab, WorkspaceView } from "../types";
 
 type EditorWorkspaceProps = {
@@ -98,7 +98,7 @@ export function EditorWorkspace({
             modified={activeTab.content}
           />
         ) : (
-          <MarkdownPreview ref={previewScrollerRef} html={previewHtml} />
+          <RenderedHtmlView ref={previewScrollerRef} html={previewHtml} />
         )}
       </section>
     </section>

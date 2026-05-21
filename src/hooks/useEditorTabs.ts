@@ -1,11 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  useCliFileListener,
-  useExternalFileReload,
-  useInitialFiles,
-  useSessionSnapshotWriter,
-  useTabAutosave,
-} from "./useTabLifecycleEffects";
+import { useEditorTabEffects } from "./useTabLifecycleEffects";
 import { useEditorFileCommands } from "./useEditorFileCommands";
 import { useTabFileSync } from "./useTabFileSync";
 import { loadTabsFromSession } from "../lib/editorTabIO";
@@ -213,16 +207,18 @@ export function useEditorTabs() {
     setIsSessionRestored(true);
   }, []);
 
-  useTabAutosave(tabs, saveTab, savingIds);
-  useExternalFileReload(
-    tabs,
-    reloadTabIfExternallyChanged,
-    savingIds,
+  useEditorTabEffects({
+    isSessionRestored,
+    onSessionRestored: markSessionRestored,
+    openFilesFromPaths,
     reloadingIds,
-  );
-  useSessionSnapshotWriter(isSessionRestored, sessionSnapshot);
-  useInitialFiles(openFilesFromPaths, restoreSavedSession, markSessionRestored);
-  useCliFileListener(openFilesFromPaths);
+    reloadTabIfExternallyChanged,
+    restoreSavedSession,
+    saveTab,
+    savingIds,
+    sessionSnapshot,
+    tabs,
+  });
 
   return {
     activeTab,

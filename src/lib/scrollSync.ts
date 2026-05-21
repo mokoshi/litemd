@@ -3,7 +3,6 @@ export type PreviewAnchor = {
   top: number;
 };
 
-export const SCROLL_SYNC_RELEASE_MS = 140;
 export const SCROLL_END_EPSILON = 2;
 
 export function clamp(value: number, min: number, max: number) {

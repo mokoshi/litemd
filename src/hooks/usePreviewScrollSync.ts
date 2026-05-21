@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type RefObject } from "react";
 import type { EditorView } from "@codemirror/view";
 import {
   clamp,
@@ -9,8 +9,9 @@ import {
   ratioScrollTop,
   scrollRange,
 } from "../lib/scrollSync";
-import { useScrollSyncLock } from "./useScrollSyncLock";
 import type { WorkspaceView } from "../types";
+
+const SCROLL_SYNC_RELEASE_MS = 140;
 
 type UsePreviewScrollSyncParams = {
   activeTabId: string | null;
@@ -39,7 +40,42 @@ export function usePreviewScrollSync({
   previewHtml,
   previewScrollerRef,
 }: UsePreviewScrollSyncParams) {
-  const { releaseScrollSyncLock, runWithScrollSyncLock } = useScrollSyncLock();
+  const scrollSyncSource = useRef<HTMLElement | null>(null);
+  const scrollSyncReleaseTimer = useRef<number | null>(null);
+
+  const releaseScrollSyncLock = useCallback(() => {
+    if (scrollSyncReleaseTimer.current) {
+      window.clearTimeout(scrollSyncReleaseTimer.current);
+      scrollSyncReleaseTimer.current = null;
+    }
+
+    scrollSyncSource.current = null;
+  }, []);
+
+  const runWithScrollSyncLock = useCallback(
+    (source: HTMLElement, sync: () => void) => {
+      if (scrollSyncSource.current && scrollSyncSource.current !== source) {
+        return false;
+      }
+
+      scrollSyncSource.current = source;
+      sync();
+
+      if (scrollSyncReleaseTimer.current) {
+        window.clearTimeout(scrollSyncReleaseTimer.current);
+      }
+
+      scrollSyncReleaseTimer.current = window.setTimeout(() => {
+        scrollSyncSource.current = null;
+        scrollSyncReleaseTimer.current = null;
+      }, SCROLL_SYNC_RELEASE_MS);
+
+      return true;
+    },
+    [],
+  );
+
+  useEffect(() => releaseScrollSyncLock, [releaseScrollSyncLock]);
 
   useEffect(() => {
     const previewScroller = previewScrollerRef.current;
