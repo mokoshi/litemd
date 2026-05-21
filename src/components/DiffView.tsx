@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { renderUnifiedDiffHtml } from "../lib/renderedDiff";
-import { hydratePreviewHtml } from "../lib/previewHydration";
+import { RenderedHtmlView } from "./RenderedHtmlView";
 
 type DiffViewProps = {
   original: string;
@@ -8,26 +8,16 @@ type DiffViewProps = {
 };
 
 export function DiffView({ original, modified }: DiffViewProps) {
-  const unifiedRef = useRef<HTMLElement | null>(null);
   const unifiedHtml = useMemo(
     () => renderUnifiedDiffHtml(original, modified),
     [original, modified],
   );
 
-  useEffect(() => {
-    const unifiedContainer = unifiedRef.current;
-    if (!unifiedContainer) {
-      return;
-    }
-
-    return hydratePreviewHtml(unifiedContainer, unifiedHtml);
-  }, [unifiedHtml]);
-
   return (
     <div className="diff-view rendered-diff-view">
-      <article
-        ref={unifiedRef}
+      <RenderedHtmlView
         className="preview rendered-diff-preview"
+        html={unifiedHtml}
       />
     </div>
   );

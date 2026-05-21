@@ -3,8 +3,12 @@ import {
   applyEditorContent,
   applyExternalReload,
   applySavedContent,
+  closeCleanTabInState,
+  closeTabInState,
   closeTabState,
+  replaceTabsState,
   upsertTab,
+  upsertTabsState,
 } from "./tabState";
 import type { EditorTab, FileContent, GitDiffContext } from "../types";
 
@@ -117,6 +121,65 @@ describe("tab state", () => {
     expect(closeTabState(tabs, "file:/tmp/c.md", "file:/tmp/c.md")).toEqual({
       tabs: [tabs[0], tabs[1]],
       activeTabId: "file:/tmp/b.md",
+    });
+  });
+
+  it("keeps tabs and active id together in state helpers", () => {
+    const first = tab("/tmp/a.md");
+    const second = tab("/tmp/b.md");
+
+    expect(replaceTabsState([first, second], "missing")).toEqual({
+      tabs: [first, second],
+      activeTabId: first.id,
+    });
+
+    expect(
+      upsertTabsState(
+        { tabs: [first], activeTabId: first.id },
+        [second],
+        { activeTabId: second.id },
+      ),
+    ).toEqual({
+      tabs: [first, second],
+      activeTabId: second.id,
+    });
+  });
+
+  it("only closes after save when the latest tab is clean", () => {
+    const clean = tab("/tmp/a.md");
+    const dirty = tab("/tmp/b.md", {
+      content: "newer local edit",
+      savedContent: "saved by close",
+      saveState: "dirty",
+    });
+
+    expect(
+      closeCleanTabInState(
+        { tabs: [clean], activeTabId: clean.id },
+        clean.id,
+        clean.content,
+      ),
+    ).toEqual({
+      tabs: [],
+      activeTabId: null,
+    });
+
+    expect(
+      closeCleanTabInState(
+        { tabs: [dirty], activeTabId: dirty.id },
+        dirty.id,
+        "saved by close",
+      ),
+    ).toEqual({
+      tabs: [dirty],
+      activeTabId: dirty.id,
+    });
+
+    expect(
+      closeTabInState({ tabs: [clean, dirty], activeTabId: dirty.id }, dirty.id),
+    ).toEqual({
+      tabs: [clean],
+      activeTabId: clean.id,
     });
   });
 });

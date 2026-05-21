@@ -7,6 +7,11 @@ import type {
 } from "../types";
 import { fileName, saveStateLabel } from "./tabs";
 
+export type EditorTabsState = {
+  tabs: EditorTab[];
+  activeTabId: string | null;
+};
+
 export function upsertTab(
   tabs: EditorTab[],
   nextTab: EditorTab,
@@ -30,6 +35,69 @@ export function updateTab(
   updater: (tab: EditorTab) => EditorTab,
 ) {
   return tabs.map((tab) => (tab.id === id ? updater(tab) : tab));
+}
+
+function activeTabIdInTabs(tabs: EditorTab[], activeTabId: string | null) {
+  if (!activeTabId) {
+    return null;
+  }
+
+  return tabs.some((tab) => tab.id === activeTabId) ? activeTabId : null;
+}
+
+export function replaceTabsState(
+  tabs: EditorTab[],
+  activeTabId: string | null,
+): EditorTabsState {
+  return {
+    tabs,
+    activeTabId: activeTabIdInTabs(tabs, activeTabId) ?? tabs[0]?.id ?? null,
+  };
+}
+
+export function setActiveTabState(
+  state: EditorTabsState,
+  activeTabId: string | null,
+): EditorTabsState {
+  if (activeTabId && !state.tabs.some((tab) => tab.id === activeTabId)) {
+    return state;
+  }
+
+  return {
+    ...state,
+    activeTabId,
+  };
+}
+
+export function upsertTabsState(
+  state: EditorTabsState,
+  nextTabs: EditorTab[],
+  options: { activeTabId?: string | null; replaceExisting?: boolean } = {},
+): EditorTabsState {
+  const tabs = nextTabs.reduce(
+    (currentTabs, tab) =>
+      upsertTab(currentTabs, tab, {
+        replaceExisting: options.replaceExisting,
+      }),
+    state.tabs,
+  );
+  const activeTabId = options.activeTabId ?? state.activeTabId;
+
+  return {
+    tabs,
+    activeTabId: activeTabIdInTabs(tabs, activeTabId) ?? tabs[0]?.id ?? null,
+  };
+}
+
+export function updateTabInState(
+  state: EditorTabsState,
+  id: string,
+  updater: (tab: EditorTab) => EditorTab,
+): EditorTabsState {
+  return {
+    ...state,
+    tabs: updateTab(state.tabs, id, updater),
+  };
 }
 
 export function markTabSaving(tabs: EditorTab[], id: string) {
@@ -147,4 +215,29 @@ export function closeTabState(
     tabs: nextTabs,
     activeTabId: nextActiveTab?.id ?? null,
   };
+}
+
+export function closeTabInState(
+  state: EditorTabsState,
+  id: string,
+): EditorTabsState {
+  return closeTabState(state.tabs, state.activeTabId, id);
+}
+
+export function closeCleanTabInState(
+  state: EditorTabsState,
+  id: string,
+  expectedContent: string,
+): EditorTabsState {
+  const tab = state.tabs.find((item) => item.id === id);
+  if (
+    !tab ||
+    tab.content !== expectedContent ||
+    tab.savedContent !== expectedContent ||
+    tab.saveState !== "saved"
+  ) {
+    return state;
+  }
+
+  return closeTabInState(state, id);
 }

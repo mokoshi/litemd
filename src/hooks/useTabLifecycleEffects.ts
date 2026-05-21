@@ -7,7 +7,7 @@ import type { EditorTab } from "../types";
 const EXTERNAL_FILE_POLL_MS = 1200;
 const AUTOSAVE_DELAY_MS = 600;
 
-type TabOperation = (tab: EditorTab) => void | Promise<void>;
+type TabOperation = (tab: EditorTab) => void | Promise<unknown>;
 type OpenFilesFromPaths = (paths: string[]) => void | Promise<void>;
 type RestoreSavedSession = () => void | Promise<void>;
 

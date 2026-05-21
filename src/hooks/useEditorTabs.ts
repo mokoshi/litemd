@@ -22,11 +22,15 @@ import {
   applyEditorContent,
   applyExternalReload,
   applySavedContent,
-  closeTabState,
+  closeCleanTabInState,
+  closeTabInState,
+  type EditorTabsState,
   markTabError,
   markTabSaving,
-  updateTab,
-  upsertTab,
+  replaceTabsState,
+  setActiveTabState,
+  updateTabInState,
+  upsertTabsState,
 } from "../lib/tabState";
 import {
   fileSignature,
@@ -45,13 +49,21 @@ import type {
   WorkspaceView,
 } from "../types";
 
+type SaveTabResult =
+  | { ok: true; savedContent: string }
+  | { ok: false };
+
 export function useEditorTabs() {
-  const [tabs, setTabs] = useState<EditorTab[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [tabState, setTabState] = useState<EditorTabsState>({
+    tabs: [],
+    activeTabId: null,
+  });
   const [isOpening, setIsOpening] = useState(false);
   const [isSessionRestored, setIsSessionRestored] = useState(false);
   const savingIds = useRef(new Set<string>());
+  const savingTasks = useRef(new Map<string, Promise<SaveTabResult>>());
   const reloadingIds = useRef(new Set<string>());
+  const { activeTabId, tabs } = tabState;
 
   const activeTab = useMemo(
     () => findTab(tabs, activeTabId),
@@ -65,21 +77,47 @@ export function useEditorTabs() {
   );
 
   const saveTab = useCallback(async (tab: EditorTab) => {
-    savingIds.current.add(tab.id);
-    setTabs((current) => markTabSaving(current, tab.id));
-
-    try {
-      const signature = await writeFile(tab.path, tab.content);
-      const gitContext = await getGitDiffContext(tab.path);
-
-      setTabs((current) =>
-        applySavedContent(current, tab.id, tab.content, signature, gitContext),
-      );
-    } catch (error) {
-      setTabs((current) => markTabError(current, tab.id, error));
-    } finally {
-      savingIds.current.delete(tab.id);
+    const existingTask = savingTasks.current.get(tab.id);
+    if (existingTask) {
+      return existingTask;
     }
+
+    const task = (async (): Promise<SaveTabResult> => {
+      savingIds.current.add(tab.id);
+      setTabState((current) => ({
+        ...current,
+        tabs: markTabSaving(current.tabs, tab.id),
+      }));
+
+      try {
+        const signature = await writeFile(tab.path, tab.content);
+        const gitContext = await getGitDiffContext(tab.path);
+
+        setTabState((current) => ({
+          ...current,
+          tabs: applySavedContent(
+            current.tabs,
+            tab.id,
+            tab.content,
+            signature,
+            gitContext,
+          ),
+        }));
+        return { ok: true, savedContent: tab.content };
+      } catch (error) {
+        setTabState((current) => ({
+          ...current,
+          tabs: markTabError(current.tabs, tab.id, error),
+        }));
+        return { ok: false };
+      } finally {
+        savingIds.current.delete(tab.id);
+        savingTasks.current.delete(tab.id);
+      }
+    })();
+
+    savingTasks.current.set(tab.id, task);
+    return task;
   }, []);
 
   const reloadTabIfExternallyChanged = useCallback(async (tab: EditorTab) => {
@@ -96,13 +134,17 @@ export function useEditorTabs() {
         getGitDiffContext(tab.path),
       ]);
 
-      setTabs((current) =>
-        applyExternalReload(current, tab.id, file, gitContext, {
+      setTabState((current) => ({
+        ...current,
+        tabs: applyExternalReload(current.tabs, tab.id, file, gitContext, {
           isSaveInFlight: savingIds.current.has(tab.id),
         }),
-      );
+      }));
     } catch (error) {
-      setTabs((current) => markTabError(current, tab.id, error));
+      setTabState((current) => ({
+        ...current,
+        tabs: markTabError(current.tabs, tab.id, error),
+      }));
     } finally {
       reloadingIds.current.delete(tab.id);
     }
@@ -114,13 +156,11 @@ export function useEditorTabs() {
       return;
     }
 
-    setTabs((current) =>
-      openedTabs.reduce(
-        (nextTabs, tab) => upsertTab(nextTabs, tab),
-        current,
-      ),
+    setTabState((current) =>
+      upsertTabsState(current, openedTabs, {
+        activeTabId: openedTabs[openedTabs.length - 1].id,
+      }),
     );
-    setActiveTabId(openedTabs[openedTabs.length - 1].id);
   }, []);
 
   const openFiles = useCallback(async () => {
@@ -160,8 +200,12 @@ export function useEditorTabs() {
       return;
     }
 
-    setTabs(restoredTabs);
-    setActiveTabId(activeTabIdAfterRestore(restoredTabs, session.activePath));
+    setTabState(
+      replaceTabsState(
+        restoredTabs,
+        activeTabIdAfterRestore(restoredTabs, session.activePath),
+      ),
+    );
   }, []);
 
   const createNewFile = useCallback(async () => {
@@ -183,8 +227,12 @@ export function useEditorTabs() {
 
       const tab = await createBlankSavedTab(path);
 
-      setTabs((current) => upsertTab(current, tab, { replaceExisting: true }));
-      setActiveTabId(tab.id);
+      setTabState((current) =>
+        upsertTabsState(current, [tab], {
+          activeTabId: tab.id,
+          replaceExisting: true,
+        }),
+      );
     } catch (error) {
       console.error(error);
     } finally {
@@ -195,19 +243,24 @@ export function useEditorTabs() {
   const closeTab = useCallback(
     async (id: string) => {
       const tab = tabs.find((item) => item.id === id);
-      if (tab && tab.content !== tab.savedContent) {
-        await saveTab(tab);
+      if (!tab) {
+        setTabState((current) => closeTabInState(current, id));
+        return;
       }
 
-      setTabs((current) => {
-        const result = closeTabState(current, activeTabId, id);
-        if (result.activeTabId !== activeTabId) {
-          setActiveTabId(result.activeTabId);
-        }
-        return result.tabs;
-      });
+      if (tab.content === tab.savedContent) {
+        setTabState((current) => closeTabInState(current, id));
+        return;
+      }
+
+      const result = await saveTab(tab);
+      if (result.ok) {
+        setTabState((current) =>
+          closeCleanTabInState(current, id, result.savedContent),
+        );
+      }
     },
-    [activeTabId, saveTab, tabs],
+    [saveTab, tabs],
   );
 
   const updateActiveTab = useCallback(
@@ -216,12 +269,16 @@ export function useEditorTabs() {
         return;
       }
 
-      setTabs((current) =>
-        updateTab(current, activeTabId, updater),
+      setTabState((current) =>
+        updateTabInState(current, activeTabId, updater),
       );
     },
     [activeTabId],
   );
+
+  const setActiveTabId = useCallback((id: string | null) => {
+    setTabState((current) => setActiveTabState(current, id));
+  }, []);
 
   const setActiveView = useCallback(
     (view: WorkspaceView) => {
@@ -252,7 +309,7 @@ export function useEditorTabs() {
         setActiveTabId(nextTabId);
       }
     },
-    [activeTabId, tabs],
+    [activeTabId, setActiveTabId, tabs],
   );
 
   const switchToTabIndex = useCallback(
@@ -262,7 +319,7 @@ export function useEditorTabs() {
         setActiveTabId(nextTabId);
       }
     },
-    [tabs],
+    [setActiveTabId, tabs],
   );
 
   const handleEditorChange = useCallback(
@@ -271,7 +328,10 @@ export function useEditorTabs() {
         return;
       }
 
-      setTabs((current) => applyEditorContent(current, activeTabId, value));
+      setTabState((current) => ({
+        ...current,
+        tabs: applyEditorContent(current.tabs, activeTabId, value),
+      }));
     },
     [activeTabId],
   );
