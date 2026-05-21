@@ -1,6 +1,31 @@
-import type { EditorTab, StoredSession, StoredSessionTab } from "../types";
+import type {
+  EditorTab,
+  StoredSession,
+  StoredSessionTab,
+  WorkspaceView,
+} from "../types";
 
 export const SESSION_STORAGE_KEY = "litemd.session.v1";
+
+function storedView(candidate: {
+  view?: unknown;
+  mode?: unknown;
+  layout?: unknown;
+}): WorkspaceView {
+  if (
+    candidate.view === "split" ||
+    candidate.view === "preview" ||
+    candidate.view === "diff"
+  ) {
+    return candidate.view;
+  }
+
+  if (candidate.mode === "diff") {
+    return "diff";
+  }
+
+  return candidate.layout === "previewOnly" ? "preview" : "split";
+}
 
 export function parseStoredSessionValue(value: unknown): StoredSession | null {
   if (!value || typeof value !== "object") {
@@ -26,9 +51,9 @@ export function parseStoredSessionValue(value: unknown): StoredSession | null {
 
     const candidate = item as {
       path?: unknown;
+      view?: unknown;
       mode?: unknown;
       layout?: unknown;
-      diffLayout?: unknown;
     };
     if (typeof candidate.path !== "string" || candidate.path.trim() === "") {
       continue;
@@ -41,9 +66,7 @@ export function parseStoredSessionValue(value: unknown): StoredSession | null {
     seen.add(candidate.path);
     tabs.push({
       path: candidate.path,
-      mode: candidate.mode === "diff" ? "diff" : "preview",
-      layout: candidate.layout === "previewOnly" ? "previewOnly" : "split",
-      diffLayout: candidate.diffLayout === "unified" ? "unified" : "sideBySide",
+      view: storedView(candidate),
     });
   }
 
@@ -53,7 +76,7 @@ export function parseStoredSessionValue(value: unknown): StoredSession | null {
       : null;
 
   return {
-    version: 1,
+    version: 2,
     tabs,
     activePath,
   };
@@ -84,12 +107,10 @@ export function createSessionSnapshot(
   }
 
   const session: StoredSession = {
-    version: 1,
+    version: 2,
     tabs: tabs.map((tab) => ({
       path: tab.path,
-      mode: tab.mode,
-      layout: tab.layout,
-      diffLayout: tab.diffLayout,
+      view: tab.view,
     })),
     activePath,
   };

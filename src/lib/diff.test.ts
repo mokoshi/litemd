@@ -1,17 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { changedLines, lineDiff, splitLines } from "./diff";
+import { lineDiff, splitLines } from "./diff";
 
 describe("diff utilities", () => {
   it("splits empty and multiline sources", () => {
     expect(splitLines("")).toEqual([]);
     expect(splitLines("a\nb")).toEqual(["a", "b"]);
-  });
-
-  it("detects added and removed changed lines", () => {
-    const changed = changedLines("a\nb\nc", "a\nx\nc\nd");
-
-    expect([...changed.original]).toEqual([2]);
-    expect([...changed.modified]).toEqual([2, 4]);
   });
 
   it("groups equal and added lines into diff operations", () => {

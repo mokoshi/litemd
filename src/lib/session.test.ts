@@ -10,9 +10,7 @@ function editorTab(path: string): EditorTab {
     content: "",
     savedContent: "",
     fileSignature: { modified_ms: null, len: 0 },
-    mode: "preview",
-    layout: "split",
-    diffLayout: "sideBySide",
+    view: "split",
     gitContext: null,
     saveState: "saved",
     status: "Saved",
@@ -25,19 +23,15 @@ describe("session storage", () => {
       tabs: [
         {
           path: "/tmp/a.md",
-          mode: "diff",
-          layout: "previewOnly",
-          diffLayout: "unified",
+          view: "diff",
         },
         {
           path: "/tmp/a.md",
-          mode: "preview",
+          view: "preview",
         },
         {
           path: "/tmp/b.md",
-          mode: "invalid",
-          layout: "invalid",
-          diffLayout: "invalid",
+          view: "invalid",
         },
         {
           path: "",
@@ -47,7 +41,23 @@ describe("session storage", () => {
     });
 
     expect(session).toEqual({
-      version: 1,
+      version: 2,
+      tabs: [
+        {
+          path: "/tmp/a.md",
+          view: "diff",
+        },
+        {
+          path: "/tmp/b.md",
+          view: "split",
+        },
+      ],
+      activePath: "/tmp/a.md",
+    });
+  });
+
+  it("reads view state from legacy mode and layout fields", () => {
+    const session = parseStoredSessionValue({
       tabs: [
         {
           path: "/tmp/a.md",
@@ -58,11 +68,25 @@ describe("session storage", () => {
         {
           path: "/tmp/b.md",
           mode: "preview",
-          layout: "split",
-          diffLayout: "sideBySide",
+          layout: "previewOnly",
         },
       ],
-      activePath: "/tmp/a.md",
+      activePath: "/tmp/b.md",
+    });
+
+    expect(session).toEqual({
+      version: 2,
+      tabs: [
+        {
+          path: "/tmp/a.md",
+          view: "diff",
+        },
+        {
+          path: "/tmp/b.md",
+          view: "preview",
+        },
+      ],
+      activePath: "/tmp/b.md",
     });
   });
 
@@ -78,21 +102,18 @@ describe("session storage", () => {
         {
           ...editorTab("/tmp/a.md"),
           content: "draft content",
-          mode: "diff",
-          diffLayout: "unified",
+          view: "diff",
         },
       ],
       "/tmp/a.md",
     );
 
     expect(JSON.parse(snapshot ?? "")).toEqual({
-      version: 1,
+      version: 2,
       tabs: [
         {
           path: "/tmp/a.md",
-          mode: "diff",
-          layout: "split",
-          diffLayout: "unified",
+          view: "diff",
         },
       ],
       activePath: "/tmp/a.md",

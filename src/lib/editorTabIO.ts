@@ -1,4 +1,4 @@
-import type { EditorTab, StoredSession, ViewMode } from "../types";
+import type { EditorTab, StoredSession, WorkspaceView } from "../types";
 import { readFile, getGitDiffContext, writeFile } from "./tauriCommands";
 import { savedTabFromFile } from "./tabs";
 
@@ -46,14 +46,12 @@ export async function loadTabsFromSession(
   for (const item of session.tabs) {
     try {
       const tab = await loadSavedTab(item.path);
-      const mode: ViewMode =
-        item.mode === "diff" && tab.gitContext?.is_git ? "diff" : "preview";
+      const view: WorkspaceView =
+        item.view === "diff" && !tab.gitContext?.is_git ? "split" : item.view;
 
       restoredTabs.push({
         ...tab,
-        mode,
-        layout: item.layout === "previewOnly" ? "previewOnly" : "split",
-        diffLayout: item.diffLayout,
+        view,
       });
     } catch (error) {
       onError(error);

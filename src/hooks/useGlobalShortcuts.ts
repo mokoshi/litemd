@@ -3,30 +3,28 @@ import type { EditorTab } from "../types";
 
 type UseGlobalShortcutsParams = {
   activeTab: EditorTab | null;
-  canShowDiff: boolean;
   createNewFile: () => void;
   closeTab: (id: string) => void;
   openFiles: () => void;
   saveTab: (tab: EditorTab) => void;
   isTabSaving: (id: string) => boolean;
-  setActiveMode: (mode: EditorTab["mode"]) => void;
   switchActiveTab: (offset: number) => void;
   switchToTabIndex: (index: number) => void;
-  togglePreviewLayout: () => void;
+  toggleDiff: () => void;
+  togglePreviewView: () => void;
 };
 
 export function useGlobalShortcuts({
   activeTab,
-  canShowDiff,
   closeTab,
   createNewFile,
   openFiles,
   isTabSaving,
   saveTab,
-  setActiveMode,
   switchActiveTab,
   switchToTabIndex,
-  togglePreviewLayout,
+  toggleDiff,
+  togglePreviewView,
 }: UseGlobalShortcutsParams) {
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
@@ -92,11 +90,7 @@ export function useGlobalShortcuts({
       if (hasPlainCommand && event.shiftKey && key === "d") {
         event.preventDefault();
         if (!event.repeat && activeTab) {
-          if (activeTab.mode === "diff") {
-            setActiveMode("preview");
-          } else if (canShowDiff) {
-            setActiveMode("diff");
-          }
+          toggleDiff();
         }
         return;
       }
@@ -104,7 +98,7 @@ export function useGlobalShortcuts({
       if (hasPlainCommand && event.shiftKey && key === "v") {
         event.preventDefault();
         if (!event.repeat && activeTab) {
-          togglePreviewLayout();
+          togglePreviewView();
         }
       }
     }
@@ -113,15 +107,14 @@ export function useGlobalShortcuts({
     return () => window.removeEventListener("keydown", handleGlobalKeyDown, true);
   }, [
     activeTab,
-    canShowDiff,
     closeTab,
     createNewFile,
     isTabSaving,
     openFiles,
     saveTab,
-    setActiveMode,
     switchActiveTab,
     switchToTabIndex,
-    togglePreviewLayout,
+    toggleDiff,
+    togglePreviewView,
   ]);
 }

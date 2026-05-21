@@ -15,9 +15,7 @@ function tab(path: string): EditorTab {
     content: "",
     savedContent: "",
     fileSignature: { modified_ms: null, len: 0 },
-    mode: "preview",
-    layout: "split",
-    diffLayout: "sideBySide",
+    view: "split",
     gitContext: null,
     saveState: "saved",
     status: "Saved",
@@ -51,4 +49,3 @@ describe("tab navigation", () => {
     expect(tabIdAtIndex(tabs, 9)).toBeNull();
   });
 });
-

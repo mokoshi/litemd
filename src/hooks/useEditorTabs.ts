@@ -42,8 +42,7 @@ import {
 } from "../lib/tabNavigation";
 import type {
   EditorTab,
-  ViewLayout,
-  ViewMode,
+  WorkspaceView,
 } from "../types";
 
 export function useEditorTabs() {
@@ -224,41 +223,27 @@ export function useEditorTabs() {
     [activeTabId],
   );
 
-  const setActiveMode = useCallback(
-    (mode: ViewMode) => {
-      updateActiveTab((tab) => ({ ...tab, mode }));
+  const setActiveView = useCallback(
+    (view: WorkspaceView) => {
+      updateActiveTab((tab) => ({ ...tab, view }));
     },
     [updateActiveTab],
   );
 
-  const setActiveLayout = useCallback(
-    (layout: ViewLayout) => {
-      updateActiveTab((tab) => ({ ...tab, layout }));
-    },
-    [updateActiveTab],
-  );
-
-  const togglePreviewLayout = useCallback(() => {
+  const togglePreviewView = useCallback(() => {
     updateActiveTab((tab) => ({
       ...tab,
-      layout: tab.layout === "previewOnly" ? "split" : "previewOnly",
-    }));
-  }, [updateActiveTab]);
-
-  const toggleDiffLayout = useCallback(() => {
-    updateActiveTab((tab) => ({
-      ...tab,
-      diffLayout: tab.diffLayout === "unified" ? "sideBySide" : "unified",
+      view: tab.view === "preview" ? "split" : "preview",
     }));
   }, [updateActiveTab]);
 
   const toggleDiff = useCallback(() => {
-    if (!canShowDiff) {
+    if (!activeTab || (!canShowDiff && activeTab.view !== "diff")) {
       return;
     }
 
-    setActiveMode(activeTab?.mode === "diff" ? "preview" : "diff");
-  }, [activeTab?.mode, canShowDiff, setActiveMode]);
+    setActiveView(activeTab.view === "diff" ? "split" : "diff");
+  }, [activeTab, canShowDiff, setActiveView]);
 
   const switchActiveTab = useCallback(
     (offset: number) => {
@@ -292,10 +277,10 @@ export function useEditorTabs() {
   );
 
   useEffect(() => {
-    if (activeTab?.mode === "diff" && !canShowDiff) {
-      setActiveMode("preview");
+    if (activeTab?.view === "diff" && !canShowDiff) {
+      setActiveView("split");
     }
-  }, [activeTab?.id, activeTab?.mode, canShowDiff, setActiveMode]);
+  }, [activeTab?.id, activeTab?.view, canShowDiff, setActiveView]);
 
   const markSessionRestored = useCallback(() => {
     setIsSessionRestored(true);
@@ -329,14 +314,12 @@ export function useEditorTabs() {
     openFiles,
     saveTab,
     isTabSaving,
-    setActiveLayout,
-    setActiveMode,
+    setActiveView,
     setActiveTabId,
     switchActiveTab,
     switchToTabIndex,
     tabs,
     toggleDiff,
-    toggleDiffLayout,
-    togglePreviewLayout,
+    togglePreviewView,
   };
 }

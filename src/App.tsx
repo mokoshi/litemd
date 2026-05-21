@@ -27,15 +27,13 @@ export default function App() {
     isTabSaving,
     openFiles,
     saveTab,
-    setActiveLayout,
-    setActiveMode,
+    setActiveView,
     setActiveTabId,
     switchActiveTab,
     switchToTabIndex,
     tabs,
     toggleDiff,
-    toggleDiffLayout,
-    togglePreviewLayout,
+    togglePreviewView,
   } = useEditorTabs();
 
   const previewHtml = useMemo(
@@ -46,31 +44,29 @@ export default function App() {
   usePreviewScrollSync({
     activeTabId,
     editorView,
-    layout: activeTab?.layout ?? null,
-    mode: activeTab?.mode ?? null,
+    view: activeTab?.view ?? null,
     previewHtml,
     previewScrollerRef,
   });
 
   useGlobalShortcuts({
     activeTab,
-    canShowDiff,
     closeTab: (id) => void closeTab(id),
     createNewFile: () => void createNewFile(),
     openFiles: () => void openFiles(),
     saveTab: (tab) => void saveTab(tab),
     isTabSaving,
-    setActiveMode,
+    toggleDiff,
     switchActiveTab,
     switchToTabIndex,
-    togglePreviewLayout,
+    togglePreviewView,
   });
 
   useEffect(() => {
-    if (activeTab?.layout === "previewOnly") {
+    if (activeTab?.view !== "split") {
       setEditorView(null);
     }
-  }, [activeTab?.id, activeTab?.layout]);
+  }, [activeTab?.id, activeTab?.view]);
 
   return (
     <main className="app-shell">
@@ -90,9 +86,7 @@ export default function App() {
           diffBase={diffBase}
           onCreateEditor={setEditorView}
           onEditorChange={handleEditorChange}
-          onSetLayout={setActiveLayout}
-          onToggleDiff={toggleDiff}
-          onToggleDiffLayout={toggleDiffLayout}
+          onSetView={setActiveView}
           previewHtml={previewHtml}
           previewScrollerRef={previewScrollerRef}
         />

@@ -10,13 +10,12 @@ import {
   scrollRange,
 } from "../lib/scrollSync";
 import { useScrollSyncLock } from "./useScrollSyncLock";
-import type { ViewLayout, ViewMode } from "../types";
+import type { WorkspaceView } from "../types";
 
 type UsePreviewScrollSyncParams = {
   activeTabId: string | null;
   editorView: EditorView | null;
-  layout: ViewLayout | null;
-  mode: ViewMode | null;
+  view: WorkspaceView | null;
   previewHtml: string;
   previewScrollerRef: RefObject<HTMLElement>;
 };
@@ -36,8 +35,7 @@ function editorScrollTopForLine(view: EditorView, lineNumber: number) {
 export function usePreviewScrollSync({
   activeTabId,
   editorView,
-  layout,
-  mode,
+  view,
   previewHtml,
   previewScrollerRef,
 }: UsePreviewScrollSyncParams) {
@@ -51,8 +49,7 @@ export function usePreviewScrollSync({
       !currentEditorView ||
       !editorScroller ||
       !previewScroller ||
-      mode !== "preview" ||
-      layout !== "split"
+      view !== "split"
     ) {
       return;
     }
@@ -103,11 +100,10 @@ export function usePreviewScrollSync({
   }, [
     activeTabId,
     editorView,
-    layout,
-    mode,
     previewHtml,
     previewScrollerRef,
     releaseScrollSyncLock,
     runWithScrollSyncLock,
+    view,
   ]);
 }

@@ -1,8 +1,3 @@
-export type ChangedLines = {
-  original: Set<number>;
-  modified: Set<number>;
-};
-
 export type DiffOp = {
   type: "equal" | "remove" | "add";
   lines: string[];
@@ -28,47 +23,6 @@ function lcsMatrix(originalLines: string[], modifiedLines: string[]) {
   }
 
   return lcs;
-}
-
-export function changedLines(original: string, modified: string): ChangedLines {
-  const originalLines = splitLines(original);
-  const modifiedLines = splitLines(modified);
-  const lcs = lcsMatrix(originalLines, modifiedLines);
-  const changedOriginal = new Set<number>();
-  const changedModified = new Set<number>();
-  let i = 0;
-  let j = 0;
-
-  while (i < originalLines.length || j < modifiedLines.length) {
-    if (
-      i < originalLines.length &&
-      j < modifiedLines.length &&
-      originalLines[i] === modifiedLines[j]
-    ) {
-      i += 1;
-      j += 1;
-      continue;
-    }
-
-    if (
-      j < modifiedLines.length &&
-      (i === originalLines.length || lcs[i][j + 1] >= lcs[i + 1][j])
-    ) {
-      changedModified.add(j + 1);
-      j += 1;
-      continue;
-    }
-
-    if (i < originalLines.length) {
-      changedOriginal.add(i + 1);
-      i += 1;
-    }
-  }
-
-  return {
-    original: changedOriginal,
-    modified: changedModified,
-  };
 }
 
 function pushDiffOp(ops: DiffOp[], type: DiffOp["type"], line: string) {

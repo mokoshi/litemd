@@ -23,9 +23,7 @@ export type CliInstallResult = {
   target_path: string;
 };
 
-export type ViewMode = "preview" | "diff";
-export type ViewLayout = "split" | "previewOnly";
-export type DiffLayout = "sideBySide" | "unified";
+export type WorkspaceView = "split" | "preview" | "diff";
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 export type UpdateState = "idle" | "checking" | "available" | "installing" | "error";
 
@@ -36,9 +34,7 @@ export type EditorTab = {
   content: string;
   savedContent: string;
   fileSignature: FileSignature;
-  mode: ViewMode;
-  layout: ViewLayout;
-  diffLayout: DiffLayout;
+  view: WorkspaceView;
   gitContext: GitDiffContext | null;
   saveState: SaveState;
   status: string;
@@ -46,13 +42,11 @@ export type EditorTab = {
 
 export type StoredSessionTab = {
   path: string;
-  mode: ViewMode;
-  layout: ViewLayout;
-  diffLayout: DiffLayout;
+  view: WorkspaceView;
 };
 
 export type StoredSession = {
-  version: 1;
+  version: 2;
   tabs: StoredSessionTab[];
   activePath: string | null;
 };
